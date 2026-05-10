@@ -1,0 +1,79 @@
+services:
+  macog:
+    build:
+      context: .
+    env_file:
+      - .env
+    environment:
+      BYPASS_TOOL_CONSENT: "true"
+      TF_INPUT: "0"
+      TESTCONTAINERS_HOST_OVERRIDE: host.docker.internal
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - .:/app
+      - /var/run/docker.sock:/var/run/docker.sock
+    working_dir: /app
+    command: ["python", "main.py"]
+
+  macog-ministack:
+    profiles:
+      - ministack
+    build:
+      context: .
+    env_file:
+      - .env
+    environment:
+      BYPASS_TOOL_CONSENT: "true"
+      TF_INPUT: "0"
+      TESTCONTAINERS_HOST_OVERRIDE: host.docker.internal
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - .:/app
+      - /var/run/docker.sock:/var/run/docker.sock
+    working_dir: /app
+    command: ["python", "ministack.py"]
+
+  # ── iac-eval harness ──────────────────────────────────────────────────────
+  # Tip: add --profile eval-with-localstack + a localstack service if you need
+  # real AWS deploy validation. Without it, v_deploy falls back to structural analysis.
+
+  eval:
+    profiles:
+      - eval
+    build:
+      context: .
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      BYPASS_TOOL_CONSENT: "true"
+      TF_INPUT: "0"
+      MACOG_EVAL_MODE: "1"
+      AWS_DEFAULT_REGION: us-east-1
+      AWS_ACCESS_KEY_ID: test
+      AWS_SECRET_ACCESS_KEY: test
+      TESTCONTAINERS_HOST_OVERRIDE: host.docker.internal
+      # API keys passed via --env-file .env
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+      DEEPSEEK_API_KEY:   ${DEEPSEEK_API_KEY:-}
+      ANTHROPIC_API_KEY:  ${ANTHROPIC_API_KEY:-}
+      ARTHROPIC_API_KEY:  ${ARTHROPIC_API_KEY:-}
+      CLAUDE_API_KEY:     ${CLAUDE_API_KEY:-}
+      CLAUDE_BASE_URL:    ${CLAUDE_BASE_URL:-https://llm.chiasegpu.vn/v1}
+      CLAUDE_MODEL_ID:    ${CLAUDE_MODEL_ID:-claude-sonnet-4-6}
+      HF_TOKEN:           ${HF_TOKEN:-}
+      IAC_EVAL_DIR:       /opt/iac-eval
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - ./eval/results:/app/eval/results
+      - /var/run/docker.sock:/var/run/docker.sock
+    working_dir: /app
+    command: >
+      python -m eval.run_eval
+        --models deepseek-free,gemini-flash
+        --config default
+        --max-iterations 3
+        --use-ministack

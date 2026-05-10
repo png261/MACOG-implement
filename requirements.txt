@@ -1,0 +1,63 @@
+# MACOG — direct dependencies (pinned for reproducibility)
+# Install: uv pip install -r requirements.txt
+#      or: pip install -r requirements.txt
+
+# ── Strands agent framework ────────────────────────────────────────────────
+strands-agents==1.38.0
+strands-agents-tools==0.5.2
+strands-agents-builder==0.1.10
+
+# ── LLM providers ─────────────────────────────────────────────────────────
+# DeepSeek and OpenRouter use OpenAI-compatible APIs.
+openai==2.36.0
+# Optional Claude helper in agents/_model.py.
+anthropic==0.94.0
+
+# ── AWS SDK ────────────────────────────────────────────────────────────────
+boto3==1.43.6
+
+# ── MiniStack / testcontainers ─────────────────────────────────────────────
+testcontainers==4.14.2
+docker==7.1.0
+requests==2.33.1
+
+# ── Observability (OpenTelemetry) ─────────────────────────────────────────
+opentelemetry-api==1.41.1
+opentelemetry-sdk==1.41.1
+opentelemetry-instrumentation==0.62b1
+opentelemetry-instrumentation-threading==0.62b1
+
+# ── Data / validation ─────────────────────────────────────────────────────
+pydantic==2.13.4
+pydantic-settings==2.14.0
+python-dotenv==1.2.2
+
+# ── Evaluation harness ────────────────────────────────────────────────────
+datasets>=2.19
+sacrebleu>=2.3
+pandas>=2.0
+# Optional for `python -m eval.run_eval --codebert`.
+# bert-score>=0.3.13
+
+# ── MCP ───────────────────────────────────────────────────────────────────
+mcp==1.27.0
+awslabs.aws-pricing-mcp-server>=1.0.30
+
+# ── External CLIs used by agent tools; install with your OS package manager ──
+# Reviewer agent:
+#   terraform  - required for `terraform init` and `terraform validate`
+#   tflint     - optional best-effort HCL linting
+#
+# Security Prover agent:
+#   conftest   - optional OPA/Rego policy execution; Python fallback is built in
+#   opa        - required for IaC-Eval Rego scoring
+#
+# Cost/Capacity agent:
+#   infracost  - required for real cost estimates
+#
+# DevOps agent:
+#   go         - required for Terratest
+#   docker     - required for MiniStack/Testcontainers
+#   rtk        - optional; proxies go commands to reduce LLM token usage
+#     brew install rtk                (macOS)
+#     cargo install --git https://github.com/rtk-ai/rtk   (any)

@@ -1,0 +1,11 @@
+.env
+__pycache__/
+*.py[cod]
+.macog_memory/
+.macog_sessions/
+eval/results/
+.terraform/
+.terraform.lock.hcl
+tfplan
+plan.json
+.DS_Store

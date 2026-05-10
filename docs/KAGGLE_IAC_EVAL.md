@@ -68,6 +68,23 @@ Set `INSTALL_CODEBERT_DEPS = True` in the first cell only if you plan to run
 `eval.run_eval --codebert`; it installs `bert-score`, `torch`, and
 `transformers`, which is slower and heavier than the smoke test path.
 
+## MiniStack
+
+The notebook includes `USE_MINISTACK = False` in the first cell. Keep the
+default for Kaggle smoke tests unless the runtime has working Docker support.
+
+When `USE_MINISTACK = True`, the notebook:
+
+- installs Go into `/kaggle/working/go`
+- checks `docker info`
+- starts and stops a MiniStack container during preflight
+- switches `DEPLOY_MODE` to `sandbox`
+- passes `--use-ministack` to `eval.run_eval`
+
+If Docker is unavailable, the notebook prints the Docker error and falls back to
+structural deploy validation so the IaC-Eval preflight and smoke tests can still
+run on Kaggle.
+
 ## Outputs
 
 Kaggle writes benchmark artifacts under:

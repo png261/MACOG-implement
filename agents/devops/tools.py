@@ -62,6 +62,7 @@ func TestTerraformApply(t *testing.T) {
 \t}
 \topts := terraform.WithDefaultRetryableErrors(t, &terraform.Options{
 \t\tTerraformDir: "../",
+\t\tVars: map[string]interface{}{},
 \t\tEnvVars: map[string]string{
 \t\t\t"AWS_ACCESS_KEY_ID":     os.Getenv("AWS_ACCESS_KEY_ID"),
 \t\t\t"AWS_SECRET_ACCESS_KEY": "test",
@@ -183,7 +184,7 @@ def generate_terratest_suite(
             fh.write(_FALLBACK_TEST)
         logs.append("No resources found — wrote fallback single-function test")
     else:
-        go_code = _build_test_file(resources, test_functions)
+        go_code = _build_test_file(session_dir, resources, test_functions)
         with open(test_file_path, "w") as fh:
             fh.write(go_code)
         logs.append(f"Wrote deployability test covering {len(test_functions)} resources")
@@ -203,7 +204,110 @@ def generate_terratest_suite(
     })
 
 
+def _matching_brace(text: str, open_index: int) -> int:
+    depth = 0
+    for idx in range(open_index, len(text)):
+        if text[idx] == "{":
+            depth += 1
+        elif text[idx] == "}":
+            depth -= 1
+            if depth == 0:
+                return idx
+    return len(text)
+
+
+def _terraform_variable_blocks(tf_dir: str) -> list[tuple[str, str]]:
+    blocks: list[tuple[str, str]] = []
+    combined = "\n".join(
+        open(os.path.join(tf_dir, f)).read()
+        for f in sorted(os.listdir(tf_dir)) if f.endswith(".tf")
+    )
+    for match in re.finditer(r'variable\s+"([^"]+)"\s*\{', combined):
+        end = _matching_brace(combined, match.end() - 1)
+        blocks.append((match.group(1), combined[match.end():end]))
+    return blocks
+
+
+def _variable_type(body: str) -> str:
+    match = re.search(r"(?m)^\s*type\s*=\s*(.+?)\s*$", body)
+    return match.group(1).strip().strip('"') if match else "string"
+
+
+def _has_default(body: str) -> bool:
+    return re.search(r"(?m)^\s*default\s*=", body) is not None
+
+
+def _sample_value_for_variable(name: str, type_expr: str) -> Any:
+    key = name.lower()
+    t = type_expr.lower()
+
+    if "bool" in t:
+        return True
+    if "number" in t:
+        return 1
+    if "list" in t or "set" in t:
+        return [_sample_value_for_variable(key.rstrip("s") or key, "string")]
+    if "map" in t:
+        return {"Name": "macog-test", "Environment": "test"}
+
+    if "allocation" in key and key.endswith("id"):
+        return "eipalloc-1234567890abcdef0"
+    if "subnet" in key and key.endswith("id"):
+        return "subnet-1234567890abcdef0"
+    if "vpc" in key and key.endswith("id"):
+        return "vpc-1234567890abcdef0"
+    if "security_group" in key and key.endswith("id"):
+        return "sg-1234567890abcdef0"
+    if "route_table" in key and key.endswith("id"):
+        return "rtb-1234567890abcdef0"
+    if "internet_gateway" in key and key.endswith("id"):
+        return "igw-1234567890abcdef0"
+    if key.endswith("arn") or "_arn" in key:
+        return "arn:aws:iam::123456789012:role/macog-test"
+    if "cidr" in key:
+        return "10.0.1.0/24" if "subnet" in key else "10.0.0.0/16"
+    if "availability_zone" in key or key in {"az", "zone"}:
+        return "us-east-1a"
+    if "region" in key:
+        return "us-east-1"
+    if "environment" in key or key == "env":
+        return "test"
+    if "name" in key:
+        return "macog-test"
+    if "port" in key:
+        return "443"
+    if "password" in key or "secret" in key or "token" in key:
+        return "MacogTest123!"
+    return f"macog-test-{re.sub(r'[^a-z0-9]+', '-', key).strip('-') or 'value'}"
+
+
+def _go_literal(value: Any) -> str:
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if isinstance(value, (int, float)):
+        return str(value)
+    if isinstance(value, list):
+        return "[]interface{}{" + ", ".join(_go_literal(v) for v in value) + "}"
+    if isinstance(value, dict):
+        items = ", ".join(f"{json.dumps(str(k))}: {_go_literal(v)}" for k, v in value.items())
+        return "map[string]interface{}{" + items + "}"
+    return json.dumps(str(value))
+
+
+def _terratest_vars(tf_dir: str) -> str:
+    entries: list[str] = []
+    for name, body in _terraform_variable_blocks(tf_dir):
+        if _has_default(body):
+            continue
+        value = _sample_value_for_variable(name, _variable_type(body))
+        entries.append(f"\t\t\t{json.dumps(name)}: {_go_literal(value)},")
+    if not entries:
+        return "\t\tVars: map[string]interface{}{},"
+    return "\t\tVars: map[string]interface{}{\n" + "\n".join(entries) + "\n\t\t},"
+
+
 def _build_test_file(
+    session_dir: str,
     resources: list[dict],
     test_functions: list[dict],  # populated in-place
 ) -> str:
@@ -217,6 +321,7 @@ def _build_test_file(
         })
 
     resource_count = len(resources)
+    vars_block = _terratest_vars(session_dir)
     return f"""\
 package test
 
@@ -236,6 +341,7 @@ func TestTerraformDeployability(t *testing.T) {{
 \t}}
 \topts := terraform.WithDefaultRetryableErrors(t, &terraform.Options{{
 \t\tTerraformDir: "../",
+{vars_block}
 \t\tEnvVars: map[string]string{{
 \t\t\t"AWS_ACCESS_KEY_ID":     os.Getenv("AWS_ACCESS_KEY_ID"),
 \t\t\t"AWS_SECRET_ACCESS_KEY": "test",
